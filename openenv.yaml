@@ -1,0 +1,141 @@
+name: email-triage-env
+version: "1.0.0"
+description: >
+  Real-world email triage and customer support automation RL environment.
+  An AI agent reads incoming emails, classifies intent, and takes actions
+  (reply, escalate, tag, archive) to maximize resolution quality.
+
+author: OpenEnv Hackathon Team
+license: MIT
+homepage: https://huggingface.co/spaces/ash1809/void
+
+# ─── Tasks ───────────────────────────────────────────────────────────────────
+tasks:
+  - id: easy
+    name: Single Email Triage
+    difficulty: easy
+    max_steps: 5
+    success_threshold: 0.70
+    description: >
+      One incoming email. Correctly classify its intent and apply the right tag.
+      Spam emails must be archived.
+
+  - id: medium
+    name: Multi-Email Resolution
+    difficulty: medium
+    max_steps: 10
+    success_threshold: 0.65
+    description: >
+      Mixed inbox of 3 emails. Classify each, write professional replies for
+      actionable emails, and archive spam.
+
+  - id: hard
+    name: Multi-Turn Escalation and Prioritization
+    difficulty: hard
+    max_steps: 20
+    success_threshold: 0.60
+    description: >
+      Complex inbox of 5 emails including urgent crises, a multi-turn complaint
+      thread, a refund, and spam. Requires urgency-based prioritization, thread
+      context tracking, and appropriate escalation decisions.
+
+# ─── Observation Space ───────────────────────────────────────────────────────
+observation_space:
+  type: structured
+  schema: Observation
+  fields:
+    current_email:
+      type: object
+      schema: EmailItem
+      nullable: true
+    inbox:
+      type: array
+      items: EmailItem
+    resolved_emails:
+      type: array
+      items: string
+    history:
+      type: array
+      items: object
+      description: Action history with step, action_type, email_id, reward
+    step_count:
+      type: integer
+    remaining_steps:
+      type: integer
+    task_id:
+      type: string
+    episode_reward:
+      type: number
+
+# ─── Action Space ─────────────────────────────────────────────────────────────
+action_space:
+  type: discrete_plus_text
+  schema: Action
+  actions:
+    classify:
+      description: Classify email intent. Required field: classification (string).
+    reply:
+      description: Send a reply. Required field: content (string, min 20 words).
+    escalate:
+      description: Escalate to senior support. Optional field: content (escalation notes).
+    archive:
+      description: Archive the email. Use only for spam.
+    tag:
+      description: Apply an informational tag. Field: content (tag string).
+
+# ─── Reward ──────────────────────────────────────────────────────────────────
+reward_range: [-1.0, 1.0]
+reward_components:
+  correct_classification:   +0.30
+  correct_action:           +0.20
+  reply_tone:               +0.20   # heuristic keyword scoring
+  reply_completeness:       +0.10
+  urgency_prioritization:   +0.20
+  penalties:
+    wrong_classification:   -0.30
+    ignored_urgent:         -0.20
+    redundant_action:       -0.10
+    invalid_email_id:       -0.10
+
+# ─── Episode ─────────────────────────────────────────────────────────────────
+episode:
+  max_steps: 20           # hard max (overridden per task)
+  termination_conditions:
+    - all emails resolved
+    - max_steps reached
+
+# ─── API Endpoints ────────────────────────────────────────────────────────────
+api:
+  base_url: https://ash1809-void.hf.space/api
+  endpoints:
+    reset:
+      method: POST
+      path: /reset
+      body: { task_id: string }
+    step:
+      method: POST
+      path: /step
+      body: { action: Action }
+    state:
+      method: GET
+      path: /state
+    tasks:
+      method: GET
+      path: /tasks
+    grader:
+      method: POST
+      path: /grader
+      body: { task_id: string, history: array, email_ids: array }
+    baseline:
+      method: POST
+      path: /baseline
+      body: { task_id: string, mock: boolean }
+
+# ─── Docker ───────────────────────────────────────────────────────────────────
+docker:
+  image: email-triage-env
+  ports:
+    backend: 8000
+    frontend: 3000
+  build_command: docker build -t email-triage-env .
+  run_command: docker run -p 8000:8000 -p 3000:3000 email-triage-env
