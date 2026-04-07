@@ -67,18 +67,29 @@ async def health():
 
 
 # ─── Frontend static file serving (production / Docker) ──────────────────────
+# IMPORTANT: Do NOT use app.mount("/", StaticFiles(...)) at the root —
+# it intercepts ALL HTTP methods (including POST) and returns 405 for API routes.
+# Instead, serve static _next/ assets under /static and use a catch-all GET.
 
 FRONTEND_BUILD_DIR = Path(__file__).parent.parent / "frontend" / "out"
 
 if FRONTEND_BUILD_DIR.exists():
-    # Serve Next.js static export
-    app.mount(
-        "/",
-        StaticFiles(directory=str(FRONTEND_BUILD_DIR), html=True),
-        name="frontend",
-    )
+    # Serve Next.js static assets (CSS/JS) under /_next/ path
+    NEXT_STATIC = FRONTEND_BUILD_DIR / "_next"
+    if NEXT_STATIC.exists():
+        app.mount(
+            "/_next",
+            StaticFiles(directory=str(NEXT_STATIC)),
+            name="nextjs-static",
+        )
 
-    @app.get("/{full_path:path}", include_in_schema=False)
+    @app.get("/", include_in_schema=False)
+    async def serve_index():
+        index = FRONTEND_BUILD_DIR / "index.html"
+        return FileResponse(str(index))
+
+    @app.get("/ui/{full_path:path}", include_in_schema=False)
     async def serve_frontend(full_path: str):
+        """Serve SPA for any non-API frontend route."""
         index = FRONTEND_BUILD_DIR / "index.html"
         return FileResponse(str(index))
