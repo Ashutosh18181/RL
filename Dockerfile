@@ -20,10 +20,12 @@ WORKDIR /app
 COPY requirements.txt ./
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copy backend + env + baseline
+# Copy backend + env + baseline + root scripts
 COPY env/ ./env/
 COPY backend/ ./backend/
 COPY baseline/ ./baseline/
+COPY inference.py ./
+COPY openenv.yaml ./
 
 # Copy built frontend static files
 COPY --from=frontend-builder /app/frontend/out ./frontend/out

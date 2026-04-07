@@ -6,9 +6,9 @@ Endpoints: /reset, /step, /state, /tasks, /grader, /baseline
 from __future__ import annotations
 
 import asyncio
-from typing import Any
+from typing import Any, Optional
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException
 from pydantic import BaseModel
 
 from env.environment import EmailTriageEnv
@@ -26,6 +26,10 @@ _env = EmailTriageEnv()
 
 class ResetRequest(BaseModel):
     task_id: str = "easy"
+
+
+class ResetRequestOptional(BaseModel):
+    task_id: Optional[str] = "easy"
 
 
 class StepRequest(BaseModel):
@@ -46,13 +50,15 @@ class BaselineRequest(BaseModel):
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.post("/reset")
-async def reset_env(req: ResetRequest):
+async def reset_env(req: Optional[ResetRequestOptional] = Body(default=None)):
     """
     Reset the environment to start a new episode.
+    Accepts an optional JSON body with task_id (defaults to 'easy').
     Returns the initial Observation.
     """
+    task_id = (req.task_id if req and req.task_id else None) or "easy"
     try:
-        obs = _env.reset(task_id=req.task_id)
+        obs = _env.reset(task_id=task_id)
         return {"ok": True, "observation": obs.model_dump()}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
