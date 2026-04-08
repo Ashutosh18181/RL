@@ -99,7 +99,11 @@ def grade_easy(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
         tone = compute_tone_score(reply)
         score += 0.2 * tone
 
-    return round(min(score, 1.0), 4)
+    final_score = min(score, 1.0)
+    # Clamp to strictly (0, 1) as required by hackathon grader
+    final_score = max(0.0001, min(final_score, 0.9999))
+    return round(final_score, 4)
+
 
 
 # ─── MEDIUM GRADER ───────────────────────────────────────────────────────────
@@ -162,7 +166,11 @@ def grade_medium(history: list[dict[str, Any]], task_email_ids: list[str]) -> fl
 
         total += email_score * per_email_score
 
-    return round(min(total, 1.0), 4)
+    final_score = min(total, 1.0)
+    # Clamp to strictly (0, 1) as required by hackathon grader
+    final_score = max(0.0001, min(final_score, 0.9999))
+    return round(final_score, 4)
+
 
 
 # ─── HARD GRADER ─────────────────────────────────────────────────────────────
@@ -250,7 +258,11 @@ def grade_hard(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
         + 0.20 * coverage
     )
 
-    return round(min(final_score, 1.0), 4)
+    final_score = min(final_score, 1.0)
+    # Clamp to strictly (0, 1) as required by hackathon grader
+    final_score = max(0.0001, min(final_score, 0.9999))
+    return round(final_score, 4)
+
 
 
 # ─── Unified grader dispatch ──────────────────────────────────────────────────
