@@ -8,30 +8,24 @@ Required environment variables:
   HF_TOKEN      — Hugging Face API token
 
 Optional:
-  ENV_BASE_URL  — Email Triage environment URL (default: https://ash1809-void.hf.space)
+  ENV_BASE_URL  — Email Triage environment URL (default: http://localhost:8000)
 """
 
 import os
 import sys
 import json
 import time
-import requests
-from openai import OpenAI
+import urllib.request
+import urllib.error
 
 # ── Config ────────────────────────────────────────────────────────────────────
-API_BASE_URL = os.environ.get("API_BASE_URL", "https://api-inference.huggingface.co/v1")
+API_BASE_URL = os.environ.get("API_BASE_URL", "https://api-inference.huggingface.co/v1").rstrip("/")
 MODEL_NAME   = os.environ.get("MODEL_NAME",   "meta-llama/Llama-3.3-70B-Instruct")
 HF_TOKEN     = os.environ.get("HF_TOKEN",     "")
-ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "https://ash1809-void.hf.space").rstrip("/")
+ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000").rstrip("/")
 
 TASKS = ["easy", "medium", "hard"]
 MAX_RETRIES = 3
-
-# ── OpenAI client (OpenAI-compatible) ─────────────────────────────────────────
-client = OpenAI(
-    base_url=API_BASE_URL,
-    api_key=HF_TOKEN,
-)
 
 # ── Logging helpers ───────────────────────────────────────────────────────────
 
@@ -65,41 +59,40 @@ def log_end(task_id: str, total_reward: float, steps: int, final_score: float):
         "score":        round(final_score, 4),
     }), flush=True)
 
+# ── HTTP Helper ───────────────────────────────────────────────────────────────
+
+def post_json(url: str, data: dict, headers: dict = None, timeout: int = 30) -> dict:
+    if headers is None:
+        headers = {}
+    headers["Content-Type"] = "application/json"
+    
+    req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST")
+    with urllib.request.urlopen(req, timeout=timeout) as response:
+        return json.loads(response.read().decode("utf-8"))
+
 # ── Environment helpers ───────────────────────────────────────────────────────
 
 def env_reset(task_id: str) -> dict:
     for attempt in range(MAX_RETRIES):
         try:
-            r = requests.post(f"{ENV_BASE_URL}/api/reset", json={"task_id": task_id}, timeout=30)
-            r.raise_for_status()
-            return r.json()
+            return post_json(f"{ENV_BASE_URL}/api/reset", {"task_id": task_id})
         except Exception as e:
             if attempt == MAX_RETRIES - 1:
-                raise
+                raise e
             time.sleep(2 ** attempt)
-
 
 def env_step(action: dict) -> dict:
     for attempt in range(MAX_RETRIES):
         try:
-            r = requests.post(f"{ENV_BASE_URL}/api/step", json={"action": action}, timeout=30)
-            r.raise_for_status()
-            return r.json()
+            return post_json(f"{ENV_BASE_URL}/api/step", {"action": action})
         except Exception as e:
             if attempt == MAX_RETRIES - 1:
-                raise
+                raise e
             time.sleep(2 ** attempt)
-
 
 def env_grader(task_id: str, history: list, email_ids: list) -> float:
     try:
-        r = requests.post(
-            f"{ENV_BASE_URL}/api/grader",
-            json={"task_id": task_id, "history": history, "email_ids": email_ids},
-            timeout=30,
-        )
-        r.raise_for_status()
-        data = r.json()
+        data = post_json(f"{ENV_BASE_URL}/api/grader", {"task_id": task_id, "history": history, "email_ids": email_ids})
         return float(data.get("score", data.get("final_score", 0.0)))
     except Exception:
         return 0.0
@@ -166,16 +159,19 @@ def get_llm_action(observation: dict) -> dict | None:
     prompt = build_prompt(observation)
 
     try:
-        response = client.chat.completions.create(
-            model=MODEL_NAME,
-            messages=[
+        headers = {"Authorization": f"Bearer {HF_TOKEN}"} if HF_TOKEN else {}
+        payload = {
+            "model": MODEL_NAME,
+            "messages": [
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user",   "content": prompt},
             ],
-            max_tokens=300,
-            temperature=0.2,
-        )
-        raw = response.choices[0].message.content.strip()
+            "max_tokens": 300,
+            "temperature": 0.2,
+        }
+        url = API_BASE_URL if API_BASE_URL.endswith("/chat/completions") else f"{API_BASE_URL}/chat/completions"
+        response = post_json(url, payload, headers=headers)
+        raw = response["choices"][0]["message"]["content"].strip()
         # Strip markdown fences if present
         if raw.startswith("```"):
             raw = raw.split("```")[1]
@@ -272,4 +268,5 @@ if __name__ == "__main__":
         # We must exit with 0 to prevent the grader from crashing on 'unhandled exception',
         # allowing it to evaluate gracefully on zero scores.
         sys.exit(0)
+
 
