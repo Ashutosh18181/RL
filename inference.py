@@ -30,34 +30,15 @@ MAX_RETRIES = 3
 # ── Logging helpers ───────────────────────────────────────────────────────────
 
 def log_start(task_id: str):
-    print(json.dumps({
-        "event":   "[START]",
-        "task_id": task_id,
-        "model":   MODEL_NAME,
-        "env_url": ENV_BASE_URL,
-    }), flush=True)
+    print(f"[START] task={task_id}", flush=True)
 
 
 def log_step(task_id: str, step: int, action: dict, reward: float, done: bool, obs_summary: str):
-    print(json.dumps({
-        "event":       "[STEP]",
-        "task_id":     task_id,
-        "step":        step,
-        "action_type": action.get("type", "unknown"),
-        "reward":      round(reward, 4),
-        "done":        done,
-        "obs":         obs_summary,
-    }), flush=True)
+    print(f"[STEP] step={step} reward={reward}", flush=True)
 
 
 def log_end(task_id: str, total_reward: float, steps: int, final_score: float):
-    print(json.dumps({
-        "event":        "[END]",
-        "task_id":      task_id,
-        "total_reward": round(total_reward, 4),
-        "steps":        steps,
-        "score":        round(final_score, 4),
-    }), flush=True)
+    print(f"[END] task={task_id} score={final_score} steps={steps}", flush=True)
 
 # ── HTTP Helper ───────────────────────────────────────────────────────────────
 
