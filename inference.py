@@ -27,6 +27,10 @@ ENV_BASE_URL = os.environ.get("ENV_BASE_URL", "http://localhost:8000").rstrip("/
 TASKS = ["easy", "medium", "hard"]
 MAX_RETRIES = 3
 
+def _clamp_score(val: float) -> float:
+    return round(max(0.0001, min(val, 0.9999)), 4)
+
+
 # ── Logging helpers ───────────────────────────────────────────────────────────
 
 def log_start(task_id: str):
@@ -76,7 +80,8 @@ def env_grader(task_id: str, history: list, email_ids: list) -> float:
         data = post_json(f"{ENV_BASE_URL}/api/grader", {"task_id": task_id, "history": history, "email_ids": email_ids})
         return float(data.get("score", data.get("final_score", 0.0)))
     except Exception:
-        return 0.0
+        return _clamp_score(0.0)
+
 
 # ── LLM agent ────────────────────────────────────────────────────────────────
 
@@ -228,15 +233,13 @@ def main():
             score = run_task(task_id)
             scores[task_id] = score
         except Exception as e:
-            print(json.dumps({"event": "[END]", "task_id": task_id, "error": str(e), "score": 0.0}), flush=True)
-            scores[task_id] = 0.0
+            # Literal string here too
+            print(f"[END] task={task_id} score=0.0001 error={str(e)}")
+            scores[task_id] = _clamp_score(0.0)
 
-    # Final summary
-    print(json.dumps({
-        "event":   "[SUMMARY]",
-        "scores":  scores,
-        "average": round(sum(scores.values()) / len(scores), 4),
-    }), flush=True)
+    avg = _clamp_score(sum(scores.values()) / len(scores))
+    print(f"[SUMMARY] easy={scores.get('easy', 0.0001)} medium={scores.get('medium', 0.0001)} hard={scores.get('hard', 0.0001)} avg={avg}", flush=True)
+
 
 
 if __name__ == "__main__":
