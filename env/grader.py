@@ -24,6 +24,12 @@ from .email_data import get_email
 from .reward import compute_tone_score
 
 
+def _clamp_score(val: float) -> float:
+    """Strictly clamp value between 0 and 1, avoiding exactly 0.0 and 1.0."""
+    return round(max(0.0001, min(val, 0.9999)), 4)
+
+
+
 # ─── Helper ───────────────────────────────────────────────────────────────────
 
 def _actions_for_email(history: list[dict[str, Any]], email_id: str) -> list[dict[str, Any]]:
@@ -63,12 +69,13 @@ def grade_easy(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
     - Optional reply quality bonus: 0.2
     """
     if not task_email_ids:
-        return 0.0
+        return _clamp_score(0.0)
 
     email_id = task_email_ids[0]
     email = get_email(email_id)
     if email is None:
-        return 0.0
+        return _clamp_score(0.0)
+
 
     score = 0.0
 
@@ -99,10 +106,8 @@ def grade_easy(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
         tone = compute_tone_score(reply)
         score += 0.2 * tone
 
-    final_score = min(score, 1.0)
-    # Clamp to strictly (0, 1) as required by hackathon grader
-    final_score = max(0.0001, min(final_score, 0.9999))
-    return round(final_score, 4)
+    return _clamp_score(score)
+
 
 
 
@@ -118,7 +123,8 @@ def grade_medium(history: list[dict[str, Any]], task_email_ids: list[str]) -> fl
     - Reply tone & completeness: 0.25
     """
     if not task_email_ids:
-        return 0.0
+        return _clamp_score(0.0)
+
 
     per_email_score = 1.0 / len(task_email_ids)
     total = 0.0
@@ -166,10 +172,8 @@ def grade_medium(history: list[dict[str, Any]], task_email_ids: list[str]) -> fl
 
         total += email_score * per_email_score
 
-    final_score = min(total, 1.0)
-    # Clamp to strictly (0, 1) as required by hackathon grader
-    final_score = max(0.0001, min(final_score, 0.9999))
-    return round(final_score, 4)
+    return _clamp_score(total)
+
 
 
 
@@ -191,7 +195,8 @@ def grade_hard(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
     - Overall coverage (all emails addressed): 20%
     """
     if not task_email_ids:
-        return 0.0
+        return _clamp_score(0.0)
+
 
     # ─── Per-email correctness (40% weight) ───────────────────────────────────
     per_email_correctness = grade_medium(history, task_email_ids)
@@ -258,10 +263,8 @@ def grade_hard(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
         + 0.20 * coverage
     )
 
-    final_score = min(final_score, 1.0)
-    # Clamp to strictly (0, 1) as required by hackathon grader
-    final_score = max(0.0001, min(final_score, 0.9999))
-    return round(final_score, 4)
+    return _clamp_score(final_score)
+
 
 
 
