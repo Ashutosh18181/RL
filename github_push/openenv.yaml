@@ -1,5 +1,5 @@
 name: email-triage-env
-version: "2.0.0"
+version: "1.0.0"
 description: >
   Real-world email triage and customer support automation RL environment.
   An AI agent reads incoming emails, classifies intent, and takes actions
@@ -39,16 +39,6 @@ tasks:
       thread, a refund, and spam. Requires urgency-based prioritization, thread
       context tracking, and appropriate escalation decisions.
 
-  - id: extreme
-    name: SLA Crisis Management
-    difficulty: extreme
-    max_steps: 40
-    success_threshold: 0.55
-    description: >
-      Massive backlog of 10 emails including immediate SLA crises. You must handle 
-      everything while meeting strict service level agreements. Missing deadlines 
-      will severely impact your score.
-
 # ─── Observation Space ───────────────────────────────────────────────────────
 observation_space:
   type: structured
@@ -83,24 +73,15 @@ action_space:
   schema: Action
   actions:
     classify:
-      description: Classify email intent.
-      fields:
-        classification: { type: string, description: "The intent category of the email.", required: true }
+      description: Classify email intent. Required field: classification (string).
     reply:
-      description: Send a reply.
-      fields:
-        content: { type: string, description: "The full text of the professional reply.", min_words: 20, required: true }
+      description: Send a reply. Required field: content (string, min 20 words).
     escalate:
-      description: Escalate to senior support.
-      fields:
-        content: { type: string, description: "Internal notes explaining why it is escalated.", required: false }
+      description: Escalate to senior support. Optional field: content (escalation notes).
     archive:
       description: Archive the email. Use only for spam.
-      fields: {}
     tag:
-      description: Apply an informational tag.
-      fields:
-        content: { type: string, description: "The tag string to apply.", required: true }
+      description: Apply an informational tag. Field: content (tag string).
 
 # ─── Reward ──────────────────────────────────────────────────────────────────
 reward_range: [-1.0, 1.0]

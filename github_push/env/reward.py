@@ -62,7 +62,6 @@ def compute_reward(
     action: Action,
     email: EmailItem,
     previous_actions_on_email: list[dict[str, Any]],
-    current_step: int,
 ) -> Reward:
     """
     Compute dense reward for a single action on an email.
@@ -125,12 +124,6 @@ def compute_reward(
             # Tone evaluation
             reply_text = action.content or ""
             tone_score = compute_tone_score(reply_text)
-
-            # Sentiment Continuity Penalty
-            if email.sentiment.value == "negative" and tone_score < 0.6:
-                tone_score *= 0.5
-                messages.append("Cold reply to negative sentiment (50% tone penalty).")
-
             tone_reward = round(0.2 * tone_score, 4)
             breakdown["reply_tone"] = tone_reward
             messages.append(f"Reply tone score: {tone_score:.2f}.")
@@ -148,9 +141,6 @@ def compute_reward(
         if needs_escalation:
             breakdown["correct_action"] = +0.2
             messages.append("Correctly escalated urgent/abuse email.")
-            if email.thread_position > 1:
-                breakdown["thread_escalation"] = +0.10
-                messages.append("Bonus: Properly escalated a threaded follow-up (+0.10).")
         else:
             breakdown["correct_action"] = -0.05
             messages.append("Escalated a non-urgent email — minor misuse of escalation.")
@@ -174,17 +164,6 @@ def compute_reward(
     elif is_urgent and action.type == ActionType.tag:
         breakdown["urgency_prioritization"] = -0.05
         messages.append("Tagged urgent email instead of acting — partial credit only.")
-
-    # ── SLA Constraint ────────────────────────────────────────────────────────
-    if email.sla_deadline_steps is not None and not is_redundant and action.type in (ActionType.reply, ActionType.escalate, ActionType.archive):
-        overdue_steps = current_step - email.sla_deadline_steps
-        if overdue_steps > 0:
-            penalty = min(0.30, overdue_steps * 0.10)
-            breakdown["sla_breach"] = -penalty
-            messages.append(f"SLA breached by {overdue_steps} steps (penalty: -{penalty:.2f}).")
-        else:
-            breakdown["sla_success"] = +0.05
-            messages.append("Acted within SLA deadline (+0.05).")
 
     # ── Sum breakdown ─────────────────────────────────────────────────────────
     total = round(sum(breakdown.values()), 4)

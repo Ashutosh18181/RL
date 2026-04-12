@@ -210,7 +210,7 @@ def main() -> None:
         help="Use rule-based mock agent (no OpenAI API key required)"
     )
     parser.add_argument(
-        "--task", choices=["easy", "medium", "hard", "extreme", "all"], default="all",
+        "--task", choices=["easy", "medium", "hard", "all"], default="all",
         help="Which task(s) to run (default: all)"
     )
     parser.add_argument(
@@ -223,7 +223,7 @@ def main() -> None:
     )
     args = parser.parse_args()
 
-    tasks = ["easy", "medium", "hard", "extreme"] if args.task == "all" else [args.task]
+    tasks = ["easy", "medium", "hard"] if args.task == "all" else [args.task]
     run_all(tasks=tasks, mock=args.mock, verbose=not args.quiet, output=args.output)
 
 

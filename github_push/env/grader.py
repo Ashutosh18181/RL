@@ -24,12 +24,6 @@ from .email_data import get_email
 from .reward import compute_tone_score
 
 
-def _clamp_score(val: float) -> float:
-    """Strictly clamp value between 0 and 1, avoiding exactly 0.0 and 1.0."""
-    return round(max(0.0001, min(val, 0.9999)), 4)
-
-
-
 # ─── Helper ───────────────────────────────────────────────────────────────────
 
 def _actions_for_email(history: list[dict[str, Any]], email_id: str) -> list[dict[str, Any]]:
@@ -69,13 +63,12 @@ def grade_easy(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
     - Optional reply quality bonus: 0.2
     """
     if not task_email_ids:
-        return _clamp_score(0.0)
+        return 0.0
 
     email_id = task_email_ids[0]
     email = get_email(email_id)
     if email is None:
-        return _clamp_score(0.0)
-
+        return 0.0
 
     score = 0.0
 
@@ -106,9 +99,7 @@ def grade_easy(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
         tone = compute_tone_score(reply)
         score += 0.2 * tone
 
-    return _clamp_score(score)
-
-
+    return round(min(score, 1.0), 4)
 
 
 # ─── MEDIUM GRADER ───────────────────────────────────────────────────────────
@@ -123,8 +114,7 @@ def grade_medium(history: list[dict[str, Any]], task_email_ids: list[str]) -> fl
     - Reply tone & completeness: 0.25
     """
     if not task_email_ids:
-        return _clamp_score(0.0)
-
+        return 0.0
 
     per_email_score = 1.0 / len(task_email_ids)
     total = 0.0
@@ -172,31 +162,34 @@ def grade_medium(history: list[dict[str, Any]], task_email_ids: list[str]) -> fl
 
         total += email_score * per_email_score
 
-    return _clamp_score(total)
-
-
+    return round(min(total, 1.0), 4)
 
 
 # ─── HARD GRADER ─────────────────────────────────────────────────────────────
 
 def grade_hard(history: list[dict[str, Any]], task_email_ids: list[str]) -> float:
     """
-    Hard task grader (5 emails with context, thread tracking, prioritization, SLA).
+    Hard task grader (5 emails with context, thread tracking, prioritization).
+
+    Additional criteria beyond medium:
+    - Urgency prioritization: extremely urgent emails handled before lower-urgency ones
+    - Thread context: subsequent thread emails recognized and escalated
+    - Correct escalation of thread continuation
 
     Rubric:
-    - Per-email correctness: 35%
-    - Urgency ordering bonus: 15%
+    - Per-email correctness: 40% (same as medium, per email)
+    - Urgency ordering bonus: 20%
     - Thread escalation: 20%
-    - Coverage (all emails addressed): 15%
-    - SLA Compliance: 15%
+    - Overall coverage (all emails addressed): 20%
     """
     if not task_email_ids:
-        return _clamp_score(0.0)
+        return 0.0
 
-    # ─── Per-email correctness (35% weight) ───────────────────────────────────
+    # ─── Per-email correctness (40% weight) ───────────────────────────────────
     per_email_correctness = grade_medium(history, task_email_ids)
 
-    # ─── Urgency ordering (15%) ───────────────────────────────────────────────
+    # ─── Urgency ordering (20%) ───────────────────────────────────────────────
+    # Check if urgent emails (score>=0.9) were handled BEFORE low-urgency emails
     urgency_score = 0.0
     high_urgency_ids = []
     low_urgency_ids = []
@@ -211,6 +204,7 @@ def grade_hard(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
             low_urgency_ids.append(email_id)
 
     if high_urgency_ids and low_urgency_ids:
+        # Find first step index for each group
         def first_step(email_ids: list[str]) -> int:
             steps = []
             for h in history:
@@ -222,101 +216,41 @@ def grade_hard(history: list[dict[str, Any]], task_email_ids: list[str]) -> floa
         low_first = first_step(low_urgency_ids)
 
         if high_first < low_first:
-            urgency_score = 1.0
+            urgency_score = 1.0      # perfect ordering
         elif high_first == low_first:
-            urgency_score = 0.5
+            urgency_score = 0.5      # interleaved
         else:
-            urgency_score = 0.0
+            urgency_score = 0.0      # wrong order — urgent handled last
     else:
-        urgency_score = 1.0
+        urgency_score = 1.0  # no ordering constraint possible
 
     # ─── Thread escalation (20%) ──────────────────────────────────────────────
-    thread_emails = [
-        eid for eid in task_email_ids
-        if (e := get_email(eid)) is not None and e.thread_position > 1
-    ]
-    if thread_emails:
-        t_score = 0.0
-        for tid in thread_emails:
-            if _has_action(history, tid, "escalate"):
-                t_score += 1.0
-            elif _has_action(history, tid, "reply"):
-                t_score += 0.5
-        thread_score = t_score / len(thread_emails)
+    thread_score = 0.0
+    # email_028 and email_029 form a thread; email_029 must be escalated
+    thread_escalation_email = "email_029"
+    if thread_escalation_email in task_email_ids:
+        if _has_action(history, thread_escalation_email, "escalate"):
+            thread_score = 1.0
+        elif _has_action(history, thread_escalation_email, "reply"):
+            thread_score = 0.5  # replied but didn't escalate — partial credit
+        else:
+            thread_score = 0.0
     else:
-        thread_score = 1.0
+        thread_score = 1.0  # thread not part of this run
 
-    # ─── SLA Compliance (15%) ─────────────────────────────────────────────────
-    sla_emails = [
-        eid for eid in task_email_ids
-        if (e := get_email(eid)) is not None and e.sla_deadline_steps is not None
-    ]
-    if sla_emails:
-        s_score = 0.0
-        for eid in sla_emails:
-            e = get_email(eid)
-            steps = [h.get("step", 999) for h in history if h.get("email_id") == eid]
-            first_action_step = min(steps) if steps else 999
-            if first_action_step <= e.sla_deadline_steps:
-                s_score += 1.0
-            elif first_action_step != 999:
-                s_score += max(0.0, 1.0 - (first_action_step - e.sla_deadline_steps) * 0.2)
-        sla_score = s_score / len(sla_emails)
-    else:
-        sla_score = 1.0
-
-    # ─── Coverage (15%) ───────────────────────────────────────────────────────
+    # ─── Coverage (20%) ───────────────────────────────────────────────────────
     addressed_emails = {h.get("email_id") for h in history}
     coverage = len([e for e in task_email_ids if e in addressed_emails]) / len(task_email_ids)
 
     # ─── Combined score ───────────────────────────────────────────────────────
     final_score = (
-        0.35 * per_email_correctness
-        + 0.15 * urgency_score
+        0.40 * per_email_correctness
+        + 0.20 * urgency_score
         + 0.20 * thread_score
-        + 0.15 * coverage
-        + 0.15 * sla_score
+        + 0.20 * coverage
     )
 
-    return _clamp_score(final_score)
-
-
-# ─── EXTREME GRADER ──────────────────────────────────────────────────────────
-
-def grade_extreme(history: list[dict[str, Any]], task_email_ids: list[str]) -> float:
-    """Extreme task grader. Tighter urgency constraints based on hard grader logic."""
-    if not task_email_ids:
-        return _clamp_score(0.0)
-    
-    # Start with base score from hard grader
-    base_score = grade_hard(history, task_email_ids)
-
-    # Tighter urgency check: ANY high urgency later than ANY low urgency = penalty.
-    urgency_penalty = 0.0
-    action_order = [h.get("email_id") for h in history]
-    # filter to first actions
-    seen = set()
-    first_actions = []
-    for eid in action_order:
-        if eid not in seen and eid in task_email_ids:
-            first_actions.append(eid)
-            seen.add(eid)
-
-    # check if high urgency comes after low
-    highest_low_idx = -1
-    for i, eid in enumerate(first_actions):
-        e = get_email(eid)
-        if e and e.urgency_score < 0.5:
-            highest_low_idx = i
-        elif e and e.urgency_score >= 0.9 and highest_low_idx != -1:
-            urgency_penalty = 0.15  # Wipe out urgency score
-            break
-            
-    final_score = base_score - urgency_penalty
-    return _clamp_score(final_score)
-
-
-
+    return round(min(final_score, 1.0), 4)
 
 
 # ─── Unified grader dispatch ──────────────────────────────────────────────────
@@ -333,7 +267,6 @@ def grade_episode(
         "easy": grade_easy,
         "medium": grade_medium,
         "hard": grade_hard,
-        "extreme": grade_extreme,
     }
     grader = graders.get(task_id)
     if grader is None:

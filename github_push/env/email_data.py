@@ -287,7 +287,6 @@ EMAIL_CORPUS: list[EmailItem] = [
         urgency_score=1.0,
         sentiment=Sentiment.negative,
         timestamp="2026-04-07T16:00:00Z",
-        sla_deadline_steps=1,
     ),
     EmailItem(
         id="email_019",
@@ -403,7 +402,6 @@ EMAIL_CORPUS: list[EmailItem] = [
         urgency_score=0.9,
         sentiment=Sentiment.negative,
         timestamp="2026-04-07T07:45:00Z",
-        sla_deadline_steps=2,
     ),
     EmailItem(
         id="email_026",
@@ -469,7 +467,6 @@ EMAIL_CORPUS: list[EmailItem] = [
         urgency_score=0.88,
         sentiment=Sentiment.negative,
         timestamp="2026-04-07T14:00:00Z",
-        thread_position=2,
         thread_id="thread_support_1234",
     ),
     EmailItem(
@@ -566,83 +563,6 @@ EMAIL_CORPUS: list[EmailItem] = [
         urgency_score=0.55,
         sentiment=Sentiment.negative,
         timestamp="2026-04-07T15:30:00Z",
-    ),
-    # ─── EXTREME TASK EMAILS ────────────────────────────────────────────────
-    EmailItem(
-        id="email_036",
-        subject="Re: Re: Re: Support ticket #1234 — manager required",
-        body=(
-            "I've been going back and forth for 4 days now. My last email was escalated but "
-            "the agent gave me a generic response. I need a manager to call me immediately. "
-            "If this isn't resolved today, I am moving to your competitor."
-        ),
-        sender="frustrated.user@email.co",
-        sender_name="Patrick O'Brien",
-        category=EmailCategory.urgent,
-        urgency_score=0.95,
-        sentiment=Sentiment.negative,
-        timestamp="2026-04-07T16:00:00Z",
-        sla_deadline_steps=3,
-        thread_position=3,
-        thread_id="thread_support_1234",
-    ),
-    EmailItem(
-        id="email_037",
-        subject="Account locked with $50k inside",
-        body=(
-            "My corporate account was just locked due to alleged 'suspicious activity'. "
-            "We have $50,000 of operating capital in there and payroll is tomorrow! "
-            "Please unfreeze the account or call our CFO right now."
-        ),
-        sender="cfo@megacorp.inc",
-        sender_name="Arthur Pendelton",
-        category=EmailCategory.urgent,
-        urgency_score=0.98,
-        sentiment=Sentiment.negative,
-        timestamp="2026-04-07T10:00:00Z",
-        sla_deadline_steps=1,
-    ),
-    EmailItem(
-        id="email_038",
-        subject="You won a cruise! Confirm now!",
-        body=(
-            "Congrats! You have been selected to win a free cruise. Just pay the $250 port fee "
-            "by clicking the link below: www.freeseacruise.scam"
-        ),
-        sender="winner@cruiselines.net",
-        sender_name="Cruise Promotions",
-        category=EmailCategory.spam,
-        urgency_score=0.0,
-        sentiment=Sentiment.positive,
-        timestamp="2026-04-07T11:00:00Z",
-    ),
-    EmailItem(
-        id="email_039",
-        subject="Need a quick status update on my order",
-        body=(
-            "Hi, just wondering when my order ORD-59921 will ship? "
-            "It's been a few days and tracking still says processing. Thanks in advance."
-        ),
-        sender="patient.buyer@webmail.org",
-        sender_name="Liam Foster",
-        category=EmailCategory.inquiry,
-        urgency_score=0.2,
-        sentiment=Sentiment.neutral,
-        timestamp="2026-04-07T08:00:00Z",
-    ),
-    EmailItem(
-        id="email_040",
-        subject="I'm reporting you to the attorney general!",
-        body=(
-            "Your company is a complete fraud. The software deleted all my files. "
-            "I'm filing a complaint with the state attorney general and suing your executives."
-        ),
-        sender="furious.customer@angry.net",
-        sender_name="Rachel Zane",
-        category=EmailCategory.abuse,
-        urgency_score=0.7,
-        sentiment=Sentiment.negative,
-        timestamp="2026-04-07T09:12:00Z",
     ),
 ]
 

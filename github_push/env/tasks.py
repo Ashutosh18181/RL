@@ -74,32 +74,11 @@ TASK_HARD = TaskConfig(
     ],
 )
 
-# ─── EXTREME TASK ────────────────────────────────────────────────────────────
-# Ten emails involving SLA deadlines, multiple threads, spam, and inquiries.
-TASK_EXTREME = TaskConfig(
-    id="extreme",
-    name="SLA Crisis Management",
-    description=(
-        "You have a massive backlog of 10 emails including immediate SLA crises. "
-        "You must handle everything while meeting strict service level agreements. "
-        "Missing deadlines will severely impact your score."
-    ),
-    max_steps=40,
-    difficulty="extreme",
-    objective="Process all 10 emails prioritizing by urgency and SLAs, avoiding negative sentiment penalties, and escalating correctly.",
-    success_threshold=0.55,
-    email_ids=[
-        "email_018", "email_028", "email_029", "email_025", "email_030",
-        "email_036", "email_037", "email_038", "email_039", "email_040"
-    ],
-)
-
 # All tasks indexed for lookup
 ALL_TASKS: dict[str, TaskConfig] = {
     "easy": TASK_EASY,
     "medium": TASK_MEDIUM,
     "hard": TASK_HARD,
-    "extreme": TASK_EXTREME,
 }
 
 

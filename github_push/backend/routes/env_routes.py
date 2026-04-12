@@ -6,9 +6,9 @@ Endpoints: /reset, /step, /state, /tasks, /grader, /baseline
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Optional
+from typing import Any
 
-from fastapi import APIRouter, Body, Depends, Header, HTTPException
+from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
 from env.environment import EmailTriageEnv
@@ -18,25 +18,14 @@ from env.tasks import ALL_TASKS
 
 router = APIRouter()
 
-# Session-isolated environments
-_envs: dict[str, EmailTriageEnv] = {"default_session": EmailTriageEnv()}
-
-def get_env(x_session_id: Optional[str] = Header(None)) -> EmailTriageEnv:
-    session_id = x_session_id or "default_session"
-    if session_id not in _envs:
-        _envs[session_id] = EmailTriageEnv()
-    return _envs[session_id]
-
+# Shared environment instance (single session; production would use Redis/session tokens)
+_env = EmailTriageEnv()
 
 
 # ─── Request / Response schemas ───────────────────────────────────────────────
 
 class ResetRequest(BaseModel):
     task_id: str = "easy"
-
-
-class ResetRequestOptional(BaseModel):
-    task_id: Optional[str] = "easy"
 
 
 class StepRequest(BaseModel):
@@ -57,53 +46,43 @@ class BaselineRequest(BaseModel):
 # ─── Endpoints ───────────────────────────────────────────────────────────────
 
 @router.post("/reset")
-async def reset_env(
-    req: Optional[ResetRequestOptional] = Body(default=None),
-    env: EmailTriageEnv = Depends(get_env)
-):
+async def reset_env(req: ResetRequest):
     """
     Reset the environment to start a new episode.
-    Accepts an optional JSON body with task_id (defaults to 'easy').
     Returns the initial Observation.
     """
-    task_id = (req.task_id if req and req.task_id else None) or "easy"
     try:
-        obs = env.reset(task_id=task_id)
+        obs = _env.reset(task_id=req.task_id)
         return {"ok": True, "observation": obs.model_dump()}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-
 @router.post("/step")
-async def step_env(req: StepRequest, env: EmailTriageEnv = Depends(get_env)):
+async def step_env(req: StepRequest):
     """
     Execute one action in the current episode.
     Returns (observation, reward, done, info).
     """
     try:
-        result = env.step(req.action)
+        result = _env.step(req.action)
         return result.model_dump()
     except RuntimeError as e:
         raise HTTPException(status_code=400, detail=str(e))
 
 
-
 @router.get("/state")
-async def get_state(env: EmailTriageEnv = Depends(get_env)):
+async def get_state():
     """Get full current environment state snapshot."""
-    return env.state()
-
+    return _env.state()
 
 
 @router.get("/tasks")
 async def list_tasks():
     """List all available task configurations."""
     return {
-        "tasks": [t.model_dump() for t in ALL_TASKS.values()],
-        "action_schema": Action.model_json_schema(),
+        "tasks": [t.model_dump() for t in ALL_TASKS.values()]
     }
-
 
 
 @router.post("/grader")
@@ -118,12 +97,9 @@ async def run_grader(req: GraderRequest):
             history=req.history,
             task_email_ids=req.email_ids,
         )
-        # Spec v2.0.0 req: top-level score
-        score = report.get("score", 0.0)
-        return {"ok": True, "score": score, "grade": report}
+        return {"ok": True, "grade": report}
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
-
 
 
 @router.post("/baseline")

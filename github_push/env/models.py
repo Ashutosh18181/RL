@@ -40,11 +40,8 @@ class EmailItem(BaseModel):
     urgency_score: float = Field(ge=0.0, le=1.0)
     sentiment: Sentiment
     timestamp: str
-    sla_deadline_steps: Optional[int] = None
-    thread_position: int = 1
     thread_id: Optional[str] = None
     is_resolved: bool = False
-
 
 
 # ---------------------------------------------------------------------------

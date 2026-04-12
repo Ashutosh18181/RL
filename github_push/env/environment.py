@@ -96,8 +96,7 @@ class EmailTriageEnv:
         ]
 
         # Compute reward
-        reward = compute_reward(action, email, prior_actions, self._step_count)
-
+        reward = compute_reward(action, email, prior_actions)
 
         # Record action in history
         history_entry: dict[str, Any] = {
