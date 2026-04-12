@@ -35,10 +35,12 @@ POSITIVE_RESOLUTION_KEYWORDS = [
 COMPLETENESS_MIN_WORDS = 20     # minimum reply length to be considered complete
 
 
-def compute_tone_score(reply_text: str) -> float:
+def compute_tone_score(reply_text: str, email_sentiment: str = "neutral") -> float:
     """
     Heuristic: score reply tone on a 0–1 scale.
     Checks for professional language, empathy, and resolution-oriented words.
+    Applies a sentiment continuity penalty if the email is negative but
+    the reply lacks any empathy keywords.
     """
     if not reply_text:
         return 0.0
@@ -51,6 +53,12 @@ def compute_tone_score(reply_text: str) -> float:
     # Normalize: max 5 professional + 3 resolution hits expected for a perfect response
     tone = min(professional_hits / 5, 1.0) * 0.6 + min(resolution_hits / 3, 1.0) * 0.4
 
+    # Sentiment continuity penalty: negative emails require empathy
+    EMPATHY_KEYWORDS = ["apologize", "sorry", "understand", "sincerely", "apologies"]
+    empathy_hits = sum(1 for kw in EMPATHY_KEYWORDS if kw in lower)
+    if email_sentiment == "negative" and empathy_hits == 0:
+        tone *= 0.5  # cold reply to a frustrated customer is penalized
+
     # Penalize very short replies
     if word_count < COMPLETENESS_MIN_WORDS:
         tone *= word_count / COMPLETENESS_MIN_WORDS
@@ -62,7 +70,7 @@ def compute_reward(
     action: Action,
     email: EmailItem,
     previous_actions_on_email: list[dict[str, Any]],
-    current_step: int,
+    current_step: int = 0,
 ) -> Reward:
     """
     Compute dense reward for a single action on an email.
@@ -71,6 +79,7 @@ def compute_reward(
         action: The action the agent took.
         email: The email the action was applied to.
         previous_actions_on_email: History of prior actions on this same email.
+        current_step: Current episode step count (used for SLA breach detection).
 
     Returns:
         Reward(value, breakdown, message)
@@ -122,15 +131,9 @@ def compute_reward(
             breakdown["correct_action"] = +0.2
             messages.append("Reply action on valid email.")
 
-            # Tone evaluation
+            # Tone evaluation (with sentiment continuity)
             reply_text = action.content or ""
-            tone_score = compute_tone_score(reply_text)
-
-            # Sentiment Continuity Penalty
-            if email.sentiment.value == "negative" and tone_score < 0.6:
-                tone_score *= 0.5
-                messages.append("Cold reply to negative sentiment (50% tone penalty).")
-
+            tone_score = compute_tone_score(reply_text, email.sentiment.value)
             tone_reward = round(0.2 * tone_score, 4)
             breakdown["reply_tone"] = tone_reward
             messages.append(f"Reply tone score: {tone_score:.2f}.")
@@ -148,9 +151,6 @@ def compute_reward(
         if needs_escalation:
             breakdown["correct_action"] = +0.2
             messages.append("Correctly escalated urgent/abuse email.")
-            if email.thread_position > 1:
-                breakdown["thread_escalation"] = +0.10
-                messages.append("Bonus: Properly escalated a threaded follow-up (+0.10).")
         else:
             breakdown["correct_action"] = -0.05
             messages.append("Escalated a non-urgent email — minor misuse of escalation.")
@@ -182,16 +182,26 @@ def compute_reward(
         breakdown["urgency_prioritization"] = -0.05
         messages.append("Tagged urgent email instead of acting — partial credit only.")
 
-    # ── SLA Constraint ────────────────────────────────────────────────────────
-    if email.sla_deadline_steps is not None and not is_redundant and action.type in (ActionType.reply, ActionType.escalate, ActionType.archive):
-        overdue_steps = current_step - email.sla_deadline_steps
-        if overdue_steps > 0:
-            penalty = min(0.30, overdue_steps * 0.10)
-            breakdown["sla_breach"] = -penalty
-            messages.append(f"SLA breached by {overdue_steps} steps (penalty: -{penalty:.2f}).")
-        else:
-            breakdown["sla_success"] = +0.05
-            messages.append("Acted within SLA deadline (+0.05).")
+    # ── SLA breach detection ──────────────────────────────────────────────────
+    if email.sla_deadline_steps is not None:
+        first_action_step = previous_actions_on_email[0].get("step", current_step) if previous_actions_on_email else current_step
+        if first_action_step > email.sla_deadline_steps:
+            steps_overdue = first_action_step - email.sla_deadline_steps
+            breach_penalty = round(-0.1 * min(steps_overdue, 3), 4)  # max -0.30
+            breakdown["sla_breach"] = breach_penalty
+            messages.append(
+                f"SLA BREACH: Acted {steps_overdue} step(s) past deadline "
+                f"(deadline={email.sla_deadline_steps}). Penalty={breach_penalty}."
+            )
+        elif not previous_actions_on_email:
+            # First action within SLA window — bonus
+            breakdown["sla_met"] = +0.05
+            messages.append(f"SLA met: acted within {email.sla_deadline_steps}-step deadline.")
+
+    # ── Thread escalation bonus ───────────────────────────────────────────────
+    if getattr(email, "thread_position", 1) > 1 and action.type == ActionType.escalate:
+        breakdown["thread_escalation_bonus"] = +0.1
+        messages.append("Correctly escalated a follow-up thread email — bonus awarded.")
 
     # ── Sum breakdown ─────────────────────────────────────────────────────────
     total = round(sum(breakdown.values()), 4)
